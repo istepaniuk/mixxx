@@ -42,7 +42,7 @@ struct DeviceMode {
 };
 
 #ifdef __LINUX__
-constexpr unsigned int kSleepSecondsAfterClosingDevice = 5;
+constexpr unsigned int kSleepSecondsAfterClosingDevice = 0;
 #endif
 } // anonymous namespace
 

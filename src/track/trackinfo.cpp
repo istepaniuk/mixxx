@@ -73,6 +73,7 @@ bool TrackInfo::compareEq(
             (getMusicBrainzWorkId() == trackInfo.getMusicBrainzWorkId()) &&
             (getRemixer() == trackInfo.getRemixer()) &&
 #endif // __EXTRA_METADATA__
+            (getRating() == trackInfo.getRating()) &&
             (getReplayGain() == trackInfo.getReplayGain()) &&
             (getSeratoTags() == trackInfo.getSeratoTags()) &&
 #if defined(__EXTRA_METADATA__)
@@ -117,6 +118,7 @@ QDebug operator<<(QDebug dbg, const TrackInfo& arg) {
     arg.dbgMusicBrainzWorkId(dbg);
     arg.dbgRemixer(dbg);
 #endif // __EXTRA_METADATA__
+    arg.dbgRating(dbg);
     arg.dbgReplayGain(dbg);
     arg.dbgSeratoTags(dbg);
 #if defined(__EXTRA_METADATA__)

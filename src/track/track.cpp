@@ -162,6 +162,7 @@ void Track::replaceMetadataFromSource(
         // Parse the imported key before entering the locking scope
         const mixxx::track::io::key::ChromaticKey importedKey =
                 KeyUtils::guessKeyFromText(importedKeyText);
+        const auto importedRating = importedMetadata.getTrackInfo().getRating();
 
         // enter locking scope
         auto locked = lockMutex(&m_qMutex);
@@ -207,6 +208,13 @@ void Track::replaceMetadataFromSource(
         }
         modified |= keysModified;
 
+        auto ratingModified = false;
+        if(importedRating.toInt() > 0){
+            m_record.setRating(importedRating.toInt());
+            ratingModified = true;
+        }
+        modified |= ratingModified;
+
         // Import track color from Serato tags if available
         const std::optional<mixxx::RgbColor::optional_t> newColor =
                 m_record.getMetadata()
@@ -229,6 +237,9 @@ void Track::replaceMetadataFromSource(
         }
         if (keysModified) {
             emit keyChanged();
+        }
+        if (ratingModified) {
+            emit ratingChanged();
         }
         if (oldReplayGain != newReplayGain) {
             emit replayGainUpdated(newReplayGain);

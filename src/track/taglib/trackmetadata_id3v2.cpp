@@ -3,6 +3,7 @@
 #include <attachedpictureframe.h>
 #include <commentsframe.h>
 #include <generalencapsulatedobjectframe.h>
+#include <popularimeterframe.h>
 #include <textidentificationframe.h>
 #include <unknownframe.h>
 
@@ -74,6 +75,9 @@ const QString kMusicBrainzOwner = QStringLiteral("http://musicbrainz.org");
 const QString kFrameDescriptionSeratoBeatGrid = QStringLiteral("Serato BeatGrid");
 const QString kFrameDescriptionSeratoMarkers = QStringLiteral("Serato Markers_");
 const QString kFrameDescriptionSeratoMarkers2 = QStringLiteral("Serato Markers2");
+
+// Email portion of the POPM frame, not actually an email to mimic WMP
+const QString kPopularimeterEmail = QStringLiteral("Windows Media Player 9 Series");
 
 // Returns the text of an ID3v2 frame as a string.
 inline QString frameToQString(
@@ -213,6 +217,32 @@ TagLib::ID3v2::CommentsFrame* findFirstCommentsFrame(
     // simply return the first matching frame
     return pFirstFrame;
 }
+
+TagLib::ID3v2::PopularimeterFrame* findFirstPopularimeterFrame(
+        const TagLib::ID3v2::Tag& tag,
+        bool preferNotEmpty = true) {
+    TagLib::ID3v2::PopularimeterFrame* pFirstFrame = nullptr;
+    for (TagLib::ID3v2::Frame* const pFrame : tag.frameListMap()["POPM"]) {
+        DEBUG_ASSERT(pFrame);
+        auto* const pNextFrame = downcastFrame<TagLib::ID3v2::PopularimeterFrame>(pFrame);
+        if (!pNextFrame) {
+            continue;
+        }
+        if (preferNotEmpty && pNextFrame->toString().isEmpty()) {
+            // we might need the first matching frame later
+            // even if it is empty
+            if (!pFirstFrame) {
+                pFirstFrame = pNextFrame;
+            }
+        } else {
+            // found what we are looking for
+            return pNextFrame;
+        }
+    }
+    // simply return the first matching frame
+    return pFirstFrame;
+}
+
 
 TagLib::ID3v2::CommentsFrame* findFirstCommentsFrameWithoutDescription(
         const TagLib::ID3v2::Tag& tag) {
@@ -502,6 +532,33 @@ void writeCommentsFrame(
                 << "Removed"
                 << numberOfRemovedCommentFrames
                 << "non-standard ID3v2 TXXX comment frames";
+    }
+}
+
+void writePopularimeterFrame(
+        TagLib::ID3v2::Tag* pTag,
+        int rating) {
+    TagLib::ID3v2::PopularimeterFrame* pFrame = findFirstPopularimeterFrame(*pTag, true);
+    if (pFrame) {
+        // Modify existing frame
+        if (rating == 0) {
+            // Purge empty frames
+            pTag->removeFrame(pFrame);
+        } else {
+            pFrame->setEmail(kPopularimeterEmail.toStdString());
+            pFrame->setRating(id3v2::popularityMeterFromStarRating(rating));
+        }
+    } else {
+        // Add a new (non-empty) frame
+        if (rating != 0) {
+            auto pFrame = std::make_unique<TagLib::ID3v2::PopularimeterFrame>();
+            pFrame->setEmail(kPopularimeterEmail.toStdString());
+            pFrame->setRating(id3v2::popularityMeterFromStarRating(rating));
+            pTag->addFrame(pFrame.get());
+            // Now that the plain pointer in pFrame is owned and managed by
+            // pTag we need to release the ownership to avoid double deletion!
+            pFrame.release();
+        }
     }
 }
 
@@ -835,6 +892,18 @@ void importTrackMetadataFromTag(
         pTrackMetadata->refTrackInfo().setTrackTotal(QString{});
     }
 
+    const TagLib::ID3v2::FrameList ratingFrames(tag.frameListMap()["POPM"]);
+    if (!ratingFrames.isEmpty()) {
+        TagLib::ID3v2::PopularimeterFrame* ratingFrame = findFirstPopularimeterFrame(tag);
+        if (ratingFrame) {
+            int ratingStars = id3v2::starRatingFromPopularityMeterRating(ratingFrame->rating());
+            pTrackMetadata->refTrackInfo().setRating(QString::number(ratingStars));
+            qDebug() << "ID3v2: Rating found:" << ratingFrame->rating() << " converted:" << ratingStars;
+        }
+    } else if (resetMissingTagMetadata) {
+        pTrackMetadata->refTrackInfo().setRating(QString::number(0));
+    }
+
 #if defined(__EXTRA_METADATA__)
     const TagLib::ID3v2::FrameList discNumberFrames(tag.frameListMap()["TPOS"]);
     if (!discNumberFrames.isEmpty()) {
@@ -1075,6 +1144,39 @@ void importTrackMetadataFromTag(
     }
 }
 
+int starRatingFromPopularityMeterRating(int rating) {
+    if (rating == 0) {
+        return 0;
+    } else if (rating < 64) {
+        return 1;
+    } else if (rating < 128) {
+        return 2;
+    } else if (rating < 196) {
+        return 3;
+    } else if (rating < 255) {
+        return 4;
+    }
+
+    return 5;
+}
+
+int popularityMeterFromStarRating(int rating) {
+    switch (rating) {
+    case 1:
+        return 63;
+    case 2:
+        return 127;
+    case 3:
+        return 195;
+    case 4:
+        return 254;
+    case 5:
+        return 255;
+    default:
+        return 0;
+    }
+}
+
 bool exportTrackMetadataIntoTag(TagLib::ID3v2::Tag* pTag,
         const TrackMetadata& trackMetadata) {
     if (!pTag) {
@@ -1215,6 +1317,10 @@ bool exportTrackMetadataIntoTag(TagLib::ID3v2::Tag* pTag,
             pTag,
             "TKEY",
             trackMetadata.getTrackInfo().getKeyText());
+
+    writePopularimeterFrame(
+            pTag,
+            trackMetadata.getTrackInfo().getRating().toInt());
 
     writeUserTextIdentificationFrame(
             pTag,

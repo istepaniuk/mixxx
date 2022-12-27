@@ -25,6 +25,10 @@ bool exportTrackMetadataIntoTag(
         TagLib::ID3v2::Tag* pTag,
         const TrackMetadata& trackMetadata);
 
+int starRatingFromPopularityMeterRating(int rating);
+
+int popularityMeterFromStarRating(int rating);
+
 } // namespace id3v2
 
 } // namespace taglib
